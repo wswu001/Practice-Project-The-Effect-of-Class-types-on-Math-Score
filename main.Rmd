@@ -1,0 +1,318 @@
+---
+title: "The Effect of Class Types on Math Scores of 1st Grade Students"
+author: "Wun-Syuan Wu"
+date: "1/20/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r include=FALSE}
+library(haven)
+Star <- read_sav("STAR_Students.sav")
+```
+
+***
+
+# 1 Introduction
+
+The Student/Teacher Achievement Ration (STAR) was a class-size study funded by the Tennessee General Assembly and conducted by the State Department of Education beginning in 1985. The STAR projected prolong for four years with 7000 students in 79 schools being randomly assigned into three different class types : small class (13 - 17 students per teacher), regular class(22-25 students per teacher) and regular class with aide. In each class, one random teacher was assigned to teach. Students as the interventions were who entered school in kindergarten and continued through third grade.
+
+The initial motivation of this experiment is because that The legislature and the educational community of Tennessee were mindful of a promising study of the benefits of small class size carried out in nearby Indiana, but were also aware of the costs associated with additional classrooms and teachers (F.Mosteller, 1995). To improve school systems, as well minimize the additional funds from government, the study of class size which might have potential impact on the education systems was conducted. 
+
+Here, under the STAR experiment, the primary question of interest of this project is whether different class sizes(class types) have any impact on math scaled score of first grade students. If there is significant evidence to conclude that the primary question of interest is true, then our secondary question of interest would be in which class type, first grade students could get the highest math scaled scores. 
+
+
+***
+
+# 2 Background
+
+The dataset we used in this  project is from Hardvard dataverse. 
+In the original data, 11601 observaitons were obtained with 379 attributes. Within 379 attributes, they primarily include following information from targeted student in kindergarten to grade 3 (grade 4 to grade 8 were taken as additional data): 
+
+ * the basic information of students (gender, ethnicity, birthday)
+ * the basic information of teachers (ethnicity, highest degree, teaching experience)
+ * the identifiers to students, teachers and schools 
+ * the experimental condition (classtype)
+ * the scale score of sections in SAT (reading, math, listening, word study scores)
+
+***
+
+# 3 Descriptive Analysis
+
+Based on the main question of interest, we selected the data only related to 1st grade students in order to make inferences on the effect on math score by three class types. After removing all the rows containing missing value, we obtained 339 observations of 4 variables with information about the identifier of 76 schools and 339 teachers, 3 class types and math scale scores. There is no obvious outliers in the selected data. In this study, teachers were randomly assigned to a class in original data, and we are more interested in the average student math score in each class, thus, we summarize the measure of math score by using mean instead of median. The distribution of mean scaled math scores in different class types are closely symmetric. However, by examining the amount of teachers in each school, the result shows that schools contains a various amount of teachers. Some of them have 12 teachers(classes) while some others only have 3 teachers(classes). Due to this unbalance of the data, it might cause variance not be constant which needed further examination in the following analysis. 
+
+```{r include=FALSE}
+### Processing data: selected variables, deal with missing value
+
+#filter data with g1 in the column name
+library(dplyr)
+starg1 <-Star %>% select(starts_with("g1"))
+
+#summary the filtered data
+summary(starg1)
+
+```
+```{r echo=FALSE}
+#choose the summary measure to be used
+summary(aggregate(g1tmathss ~ g1tchid, data = starg1, FUN = mean))
+summary(aggregate(g1tmathss ~ g1tchid, data = starg1, FUN = median))
+summary(aggregate(g1tmathss ~ g1tchid, data = starg1, FUN = quantile))
+
+#calculate the summary measure and get the needed variables 
+starg1_aggr <- aggregate(g1tmathss ~ g1schid + g1tchid + g1classtype + g1classsize , data = starg1, FUN = mean)
+
+#dealing with NA value
+starg1_complete <- na.omit(starg1_aggr)
+
+#summary the selected variables
+sapply(starg1_complete, class)
+```
+
+```{r include=FALSE}
+#convert the data type in starg1_complete table
+library(hablar)
+starg1_complete <- starg1_complete %>% convert(fct(1,2,3,4))
+```
+
+```{r echo=FALSE}
+### Multivariate descriptive analysis
+
+#boxplot for scale math score v.s. class types
+library(ggplot2)
+ggplot(starg1_complete, aes(x = g1classtype, y = g1tmathss)) +
+  geom_boxplot()
+```
+```{r include=FALSE}
+#outcome v.s. school id
+starg1_complete %>% count(g1schid, sort = TRUE) 
+
+starg1_groupby_schid <- starg1_complete %>% 
+  group_by(g1schid) %>%
+  summarize(mean = mean(g1tmathss))
+
+```
+
+***
+
+# 4 Inferential Analysis
+
+Based on the primary question of interest, we chose two-way ANOVA to test whether the categorical variables(class type("classtype") and school id("g1schid")) has an effect on the quantitative variable(scaled math scores("g1tmathss")). In the two-way ANOVA model, we take 3 class types and 76 schools as two factos and we set it as following:
+$$Y_{ijk} = \mu_{..} + \alpha_i + \beta_j + \epsilon_{ijk}, \ i = 1,...,3,\ j = 1,...,76, \ k = 1,...,n_{ij} $$
+where $\mu_{..}$ represents the overall average of scaled math score,$\alpha_i$ represents the factor effect of class type and $\beta_j$ represents the factor effect of different schools. Also, $\epsilon_{ijk}$ are i.i.d $N(0, \sigma^2)$ as our assumptions.
+The reason we did not include interaction of class type and schools in the model is according to the result to the hypothesis testing, that is, there is no obvious evidence to show that adding the interaction term can make any difference on effecting the scaled math scores under significance level 0.05.
+
+In the fitting results, it shows that class type 1(small class) was taken as reference. The second and third type of class tend to have lower average of scaled math scores than the small class type. 
+And then based on the ANOVA table we obtained here, we conducted F test on both factors respectively. The result conclude that under the significance level $\alpha = 0.05$, we can reject the null hypothesis that it is statistically significant that both class type and school factor have unequal mean value, that is, they will affect student's math score significantly.
+
+Because the primary question of interest has been satisfied, we conducted Tukey's test to answer our second question of interest: which class type affect math score the most. Under the test result, we could conclude that under significance level 0.05, it is significant that there are differences of average math score between small class with regular class(i=1,2), and small class with regular class with aide(i=1,3). Furthermore, the small class type has the most effect on the math score.
+
+
+```{r include=FALSE}
+### Fitting models
+
+#two-way anova without interaction
+g1.fit <- aov(g1tmathss ~ g1classtype + g1schid, data = starg1_complete)
+summary(g1.fit)
+```
+```{r echo = FALSE}
+anova(g1.fit)
+g1.fit$coefficients[1:3]
+```
+```{r include = FALSE}
+#two-way anova with interaction
+g1.interaction <- aov(g1tmathss ~ g1classtype*g1schid, data = starg1_complete)
+anova(g1.interaction)
+```
+
+```{r include=FALSE}
+### Hypothesis Testing
+#Test for the main effect of class type
+
+#F statistics = 20.99087
+anova(g1.fit)[1,4]
+#critical value = 3.030382
+qf(1-0.05,2,261)
+
+#Test for the main effect of school indicator
+
+#F statistics = 6.593013
+anova(g1.fit)[2,4]
+#critical value = 1.338174
+qf(1-0.05,75,261)
+```
+
+```{r include=FALSE}
+###Test for interaction
+
+#Test whether we need the interaction
+anova(g1.fit, g1.interaction)
+
+#test statistics = 0.9101785
+anova(g1.fit, g1.interaction)$F[2]
+#critical value = 1.341821
+qf(0.95, 261-115, 115)
+```
+
+```{r include=FALSE}
+###Tukey test
+TukeyHSD(g1.fit, conf.level = 0.95)$g1classtype
+```
+
+***
+
+# 5 Sensitivity Analysis
+
+We have (1)normality,(2) constant variance,(3) independence assumptions of error term. Thus, we obtained normal Q-Q plot and residuals v.s. fitted value plot to see if the assumptions are violated. In the residuals v.s. fitted value plot, there is no obvious pattern of residuals; and in the normal Q-Q plot, we can see that there is heavy tail in the distribution. The normality and constant variance assumptions of error term held both well in conclusion. On top of that, from residuals v.s. leverage plot, it is also showed that there is no extreme outliers or leverage points. The independence of the error term is hold because students and teachers were randomly assigned to classes, these repetitive actions reduced the correlation happened during experiments.
+
+```{r echo = FALSE}
+par(mfrow=c(2,2))
+plot(g1.fit)
+```
+
+***
+
+# 6 Conclusion
+
+In this study, as we analyze above, the average of scale math score will be affected by the class type. Student assigned in the small class tends to have better math score while students in regular class with or without aide has relatively lower math score. However, there are still many possible factors that may have effect on students math score such as the experience of teacher or the urbanicity grade of one school. More analysis and testing are needed to get further information on this topic.
+
+***
+
+# Acknowledgement
+
+
+***
+
+# Reference
+Frederick Mosteller (1995).The Future of Children Vol. 5, No. 2, Critical Issues for Children and Youths (Summer - Autumn, 1995), pp. 113-127. Princeton University
+
+***
+
+# Appendix
+## R code
+
+#### Load Data
+```{r eval=FALSE}
+library(haven)
+Star <- read_sav("STAR_Students.sav")
+```
+
+***
+
+#### Section 3
+```{r}
+### Processing data: selected variables, deal with missing value
+
+#filter data with g1 in the column name
+library(dplyr)
+starg1 <-Star %>% select(starts_with("g1"))
+```
+```{r eval=FALSE}
+#summary the filtered data
+summary(starg1)
+```
+```{r}
+#choose the summary measure to be used
+summary(aggregate(g1tmathss ~ g1tchid, data = starg1, FUN = mean))
+summary(aggregate(g1tmathss ~ g1tchid, data = starg1, FUN = median))
+
+#calculate the summary measure and get the needed variables 
+starg1_aggr <- aggregate(g1tmathss ~ g1schid + g1tchid + g1classtype + g1classsize , data = starg1, FUN = mean)
+
+#dealing with NA value
+starg1_complete <- na.omit(starg1_aggr)
+```
+```{r eval=FALSE}
+#summary the selected variables
+sapply(starg1_complete, class)
+```
+
+```{r}
+#convert the data type in starg1_complete table
+library(hablar)
+starg1_complete <- starg1_complete %>% convert(fct(1,2,3,4))
+```
+
+```{r}
+### Multivariate descriptive analysis
+
+#boxplot for scale math score v.s. class types
+library(ggplot2)
+ggplot(starg1_complete, aes(x = g1classtype, y = g1tmathss)) +
+  geom_boxplot()
+
+#outcome v.s. school id
+starg1_complete %>% count(g1schid, sort = TRUE) 
+
+starg1_groupby_schid <- starg1_complete %>% 
+  group_by(g1schid) %>%
+  summarize(mean = mean(g1tmathss))
+
+```
+
+***
+
+#### Section 4
+```{r}
+### Fitting models
+
+#two-way anova without interaction
+g1.fit <- aov(g1tmathss ~ g1classtype + g1schid, data = starg1_complete)
+summary(g1.fit)
+anova(g1.fit)
+g1.fit$coefficients[1:3]
+
+#two-way anova with interaction
+g1.interaction <- aov(g1tmathss ~ g1classtype*g1schid, data = starg1_complete)
+anova(g1.interaction)
+```
+
+```{r}
+### Hypothesis Testing
+#Test for the main effect of class type
+
+#F statistics = 20.99087
+anova(g1.fit)[1,4]
+#critical value = 3.030382
+qf(1-0.05,2,261)
+
+#Test for the main effect of school indicator
+
+#F statistics = 6.593013
+anova(g1.fit)[2,4]
+#critical value = 1.338174
+qf(1-0.05,75,261)
+```
+
+```{r}
+###Test for interaction
+
+#Test whether we need the interaction
+anova(g1.fit, g1.interaction)
+
+#test statistics = 0.9101785
+anova(g1.fit, g1.interaction)$F[2]
+#critical value = 1.341821
+qf(0.95, 261-115, 115)
+```
+
+```{r}
+###Tukey test
+TukeyHSD(g1.fit, conf.level = 0.95)$g1classtype
+```
+
+***
+
+#### Section 5
+```{r}
+###Diagnostic plots
+par(mfrow=c(2,2))
+plot(g1.fit)
+```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
